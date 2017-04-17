@@ -5,20 +5,36 @@ $(function() {
     /* Listen for messages */
 	chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
 	    /* If the received message has the expected format... */
-	    if (msg) {
-	    	var currentSeq = msg.taobaoItem.seq;
-	    	var taobaoItem = msg.taobaoItem.content;
-	    	runAutoTrade(taobaoItem.id, taobaoItem.colorSku, taobaoItem.sizeSku, taobaoItem.amount);
-	    	// sendResponse 回傳訊息僅在同步內有效
-	    	sendResponse({currentSeq: currentSeq});
 
-	    	autoTradeEnsureDone(function() {
-	    		console.log('msg', msg);
-		    	console.log('#' + msg.taobaoItem.seq + ' done.', '(Received a msg from bp...)');
+	    switch(msg.type) {
+		    case 'autoTrade':
+		    	var currentSeq = msg.taobaoItem.seq;
+		    	var taobaoItem = msg.taobaoItem.content;
+		    	runAutoTrade(taobaoItem.id, taobaoItem.colorSku, taobaoItem.sizeSku, taobaoItem.amount);
+		    	// sendResponse 回傳訊息僅在同步內有效
+		    	sendResponse({currentSeq: currentSeq});
 
-		        chrome.runtime.sendMessage({taobaoItemId: taobaoItem.id});
-		    });
-	    }
+		    	autoTradeEnsureDone(function() {
+		    		console.log('msg', msg);
+			    	console.log('#' + msg.taobaoItem.seq + ' done.', '(Received a msg from bp...)');
+			        chrome.runtime.sendMessage({taobaoItemId: taobaoItem.id});
+			    });
+		        break;
+		    case 'tradeConfigFromContentScript':
+		    	// 要先 JSON.stringify() 再 encodeURIComponent()
+		    	// 範例儲存方式 <div id="taobaoItemsContentScript" data-items="%5B%7B%22content%22%3A%7B%22id%22%3A%22527361405258%22%2C%22colorSku%22%3A%2220509%3A28315%22%2C%22sizeSku%22%3A%221627207%3A149938866%22%2C%22amount%22%3A10%7D%2C%22done%22%3A0%7D%2C%7B%22content%22%3A%7B%22id%22%3A%22545998369080%22%2C%22colorSku%22%3A%2220509%3A1446377418%22%2C%22sizeSku%22%3A%221627207%3A7201401%22%2C%22amount%22%3A8%7D%2C%22done%22%3A0%7D%5D">我是taobaoItems<div>
+		    	var $targetElement = $('#taobaoItemsContentScript');
+		    	if ($targetElement.length > 0 && typeof $targetElement.data('items') != 'undefined') {
+		    		var taobaoItems = JSON.parse(decodeURIComponent($targetElement.data('items')));
+		    		sendResponse({succsess: true, taobaoItems: taobaoItems});
+		    	} else {
+		    		sendResponse({succsess: false});
+		    	}
+
+		        break;
+		    default:
+		    	console.log("It doesn't match type:" + msg.type);
+		}
 	});
 });
 

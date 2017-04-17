@@ -22,7 +22,7 @@
     "content_scripts": [
         {
             "matches": [
-                "*://world.taobao.com/item/*"
+                "<all_urls>"
             ],
             "js": [
                 "js/external/jquery-3.2.1.min.js",

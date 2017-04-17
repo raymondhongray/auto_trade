@@ -1,13 +1,16 @@
+window.isSetTradeConfig = false;
+
 chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
     var tabStatus = changeInfo.status;
 
-    if (tabStatus == 'complete') {
+    if (window.isSetTradeConfig && tabStatus == 'complete') {
     	console.log('tabId: #' + tabId + ' onUpdated...');
         function returnMsgCallback(res) {
             console.log(res, 'Got a callback msg from cs...');
         }
 
         chrome.tabs.sendMessage(tabId, {
+        	type: 'autoTrade',
         	taobaoItem: autoTrade.getTaobaoItem()
         }, returnMsgCallback);
     }
@@ -28,10 +31,9 @@ chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
     if (seq == autoTrade.getTaobaoItemListSize()) {
     	return;
     }
+
     autoTrade.setTaobaoItem(seq, autoTrade.getTaobaoListContentBySeq(seq));
-    var taobaoItem = autoTrade.getTaobaoItem();
-    var url = 'https://item.taobao.com/item.htm?id=' + taobaoItem.content.id;
-    autoTrade.chromeTabsCreate(url);
+    triggerAutoTrade();
 
     chrome.tabs.remove([sender.tab.id]);
 });
@@ -60,7 +62,28 @@ var autoTrade = (function() {
     		chrome.tabs.create({url: url});
     		console.log('#' + taobaoItem.seq + ' tabs created...');
   		},
-  		getTaobaoItemListFromContentScript: function() {
+  		tradeConfigFromContentScript: function(port) {
+  			port.onMessage.addListener(function(msg) {
+  				chrome.tabs.query({
+			        currentWindow: true,
+			        active: true
+			    }, function(currentTabs) {
+			    	var currentTabId = currentTabs[0].id
+		  			function returnMsgCallback(res) {
+			            console.log(res, 'Get TaobaoItems from content script...');
+			            if (res.succsess && typeof res.taobaoItems != 'undefined') {
+
+			            	autoTrade.initTaobaoItemList(res.taobaoItems);
+			            	triggerAutoTrade();
+			           	} else {
+						    port.postMessage({success: false, message: 'Error: content script 找不到 定義的 taobaoItemList javascript 物件結構！'});
+			           	}
+			        }
+		  			chrome.tabs.sendMessage(currentTabId, {
+			        	type: 'tradeConfigFromContentScript'
+			        }, returnMsgCallback);
+			    });
+		    });
   		},
   		initTaobaoItemList: function(list) {
 			taobaoItemList = list;
@@ -97,8 +120,11 @@ chrome.runtime.onConnect.addListener(function(port) {
 	console.log(port);
 
 	switch(port.name) {
-	    case 'tradeConfig':
-	        setTradeConfig(port)
+	    case 'tradeConfigFromPopup':
+	        setTradeConfigFromPopup(port);
+	        break;
+	    case 'tradeConfigFromContentScript':
+			autoTrade.tradeConfigFromContentScript(port);
 	        break;
 	    case 'parseBillPage':
 	        break;
@@ -107,7 +133,7 @@ chrome.runtime.onConnect.addListener(function(port) {
 	}
 });
 
-var setTradeConfig = function(port) {
+var setTradeConfigFromPopup = function(port) {
 	port.onMessage.addListener(function(msg) {
 		console.log(msg, 'trade config message recieved');
 
@@ -116,8 +142,15 @@ var setTradeConfig = function(port) {
 	        return;
 	    }
 	    autoTrade.initTaobaoItemList(msg.taobaoItems);
-	    var taobaoItemId = autoTrade.getTaobaoItem().content.id;
-	    var url = 'https://item.taobao.com/item.htm?id=' + taobaoItemId;
-	    autoTrade.chromeTabsCreate(url);
+	    triggerAutoTrade();
 	});
+}
+
+var triggerAutoTrade = function() {
+
+    var taobaoItemId = autoTrade.getTaobaoItem().content.id;
+    var url = 'https://item.taobao.com/item.htm?id=' + taobaoItemId;
+    autoTrade.chromeTabsCreate(url);
+
+    window.isSetTradeConfig = true;
 }
