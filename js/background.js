@@ -8,7 +8,7 @@ chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
         }
 
         chrome.tabs.sendMessage(tabId, {
-        	taobaoItem: communicator.getTaobaoItem()
+        	taobaoItem: autoTrade.getTaobaoItem()
         }, returnMsgCallback);
     }
 });
@@ -21,25 +21,23 @@ chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
 	console.log(msg, '(Received a msg from cs...)');
 	console.log(sender.tab.id, '(Received a msg from cs...)');
 
-	var seq = communicator.getCurrentSeq();
+	var seq = autoTrade.getCurrentSeq();
 
-	communicator.setTradeDoneBySeq(seq++);
-	console.log('test1', seq);
-	console.log('test2', communicator.getTaobaoItemListSize());
+	autoTrade.setTradeDoneBySeq(seq++);
 
-    if (seq == communicator.getTaobaoItemListSize()) {
+    if (seq == autoTrade.getTaobaoItemListSize()) {
     	return;
     }
-    communicator.setTaobaoItem(seq, communicator.getTaobaoListContentBySeq(seq));
-    var taobaoItem = communicator.getTaobaoItem();
+    autoTrade.setTaobaoItem(seq, autoTrade.getTaobaoListContentBySeq(seq));
+    var taobaoItem = autoTrade.getTaobaoItem();
     var url = 'https://item.taobao.com/item.htm?id=' + taobaoItem.content.id;
-    communicator.chromeTabsCreate(url);
+    autoTrade.chromeTabsCreate(url);
 
     chrome.tabs.remove([sender.tab.id]);
 });
 
-// 做一個溝通物件給 popup.js
-var communicator = (function() {
+// 儲存自動執行點選 taobao item 內容的所有狀態
+var autoTrade = (function() {
 	var totalItem = 0;
 	var taobaoItem = {
 		seq: 0,
@@ -94,3 +92,32 @@ var communicator = (function() {
 	    }
   	};
 })();
+
+chrome.runtime.onConnect.addListener(function(port) {
+	console.log(port);
+
+	switch(port.name) {
+	    case 'tradeConfig':
+	        setTradeConfig(port)
+	        break;
+	    case 'parseBillPage':
+	        break;
+	    default:
+	    	console.log("It doesn't match port name:" + port.name);
+	}
+});
+
+var setTradeConfig = function(port) {
+	port.onMessage.addListener(function(msg) {
+		console.log(msg, 'trade config message recieved');
+
+		if (msg.taobaoItems.length == 0) {
+	        port.postMessage({success: false, message: 'Error: taobaoItemList 不得為空值！'});
+	        return;
+	    }
+	    autoTrade.initTaobaoItemList(msg.taobaoItems);
+	    var taobaoItemId = autoTrade.getTaobaoItem().content.id;
+	    var url = 'https://item.taobao.com/item.htm?id=' + taobaoItemId;
+	    autoTrade.chromeTabsCreate(url);
+	});
+}

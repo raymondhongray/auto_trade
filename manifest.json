@@ -1,7 +1,7 @@
 {
     "manifest_version": 2,
 
-    "name": "VeryBuy自動拍_Chrome擴充版",
+    "name": "VeryBuy 批次自動拍",
     "description": "這是一個針對 { VeryBuy後台 -> 商品管理 -> 批次自動拍 } 的替代擴充工具",
     "version": "1.0",
     "browser_action": {
