@@ -1,9 +1,16 @@
-window.isSetTradeConfig = false;
+window.isAutoTradeStarted = false;
+window.cartUrl = 'https://world.taobao.com/cart/cart.htm?showResult=1';
 
 chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
     var tabStatus = changeInfo.status;
 
-    if (window.isSetTradeConfig && tabStatus == 'complete') {
+    if (tab.url == window.cartUrl) {
+    	chrome.tabs.sendMessage(tabId, {
+        	type: 'showResult',
+        });
+        return;
+    }
+    if (window.isAutoTradeStarted && tabStatus == 'complete') {
     	console.log('tabId: #' + tabId + ' onUpdated...');
         function returnMsgCallback(res) {
             console.log(res, 'Got a callback msg from cs...');
@@ -21,21 +28,36 @@ chrome.tabs.onRemoved.addListener(function (tabId, removeInfo) {
 });
 
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
-	console.log(msg, '(Received a msg from cs...)');
-	console.log(sender.tab.id, '(Received a msg from cs...)');
 
-	var seq = autoTrade.getCurrentSeq();
+	switch(msg.type) {
+		case 'autoTrade':
+			console.log(msg, '(Received a msg from cs...)');
+			console.log(sender.tab.id, '(Received a msg from cs...)');
 
-	autoTrade.setTradeDoneBySeq(seq++);
+			var seq = autoTrade.getCurrentSeq();
 
-    if (seq == autoTrade.getTaobaoItemListSize()) {
-    	return;
-    }
+			autoTrade.setAdditionalInfoBySeq(seq, msg.additionalInfo);
 
-    autoTrade.setTaobaoItem(seq, autoTrade.getTaobaoListContentBySeq(seq));
-    triggerAutoTrade();
+			autoTrade.setTradeDoneBySeq(seq++);
 
-    chrome.tabs.remove([sender.tab.id]);
+		    if (seq == autoTrade.getTaobaoItemListSize()) {
+		    	autoTrade.chromeTabsCreate(window.cartUrl);
+		    	chrome.tabs.remove([sender.tab.id]);
+		    	window.isAutoTradeStarted = false;
+		    	return;
+		    }
+
+		    autoTrade.setTaobaoItem(seq, autoTrade.getTaobaoListContentBySeq(seq));
+		    triggerAutoTrade();
+
+		    chrome.tabs.remove([sender.tab.id]);
+		    break;
+		case 'showResult':
+			autoTrade.chromeTabsCreate('result.html');
+		break;
+		default:
+		    console.log("It doesn't match type:" + msg.type);
+	}
 });
 
 // 儲存自動執行點選 taobao item 內容的所有狀態
@@ -70,13 +92,18 @@ var autoTrade = (function() {
 			    }, function(currentTabs) {
 			    	var currentTabId = currentTabs[0].id
 		  			function returnMsgCallback(res) {
-			            console.log(res, 'Get TaobaoItems from content script...');
+		  				if (typeof res == 'undefined') {
+		  					window.isAutoTradeStarted = false;
+		  					port.postMessage({success: false, message: 'Error: content script 不可在chrome extensions 網域執行！'});
+		  					return;
+		  				}
 			            if (res.succsess && typeof res.taobaoItems != 'undefined') {
 
 			            	autoTrade.initTaobaoItemList(res.taobaoItems);
 			            	triggerAutoTrade();
 			           	} else {
-						    port.postMessage({success: false, message: 'Error: content script 找不到 定義的 taobaoItemList javascript 物件結構！'});
+			           		window.isAutoTradeStarted = false;
+						    port.postMessage({success: false, message: 'Error: content script 找不到 定義的 taobaoItems javascript 物件結構 (Hint: document.getElementById("taobaoItemsContentScript"))！'});
 			           	}
 			        }
 		  			chrome.tabs.sendMessage(currentTabId, {
@@ -86,7 +113,10 @@ var autoTrade = (function() {
 		    });
   		},
   		initTaobaoItemList: function(list) {
-			taobaoItemList = list;
+			taobaoItemList = [];
+			for (x in list) {
+			    taobaoItemList.push({content: list[x], done: 0});
+			}
 			taobaoItem.seq = 0;
 			taobaoItem.content = taobaoItemList[0].content;
 			totalItem = taobaoItemList.length;
@@ -112,6 +142,11 @@ var autoTrade = (function() {
 	    },
 	    setTradeDoneBySeq: function(seq) {
 	    	taobaoItemList[seq].done = 1;
+	    },
+	    setAdditionalInfoBySeq: function(seq, additionalInfo) {
+	    	taobaoItemList[seq].content.name = additionalInfo.itemName;
+	    	taobaoItemList[seq].content.colorName = additionalInfo.colorName;
+	    	taobaoItemList[seq].content.sizeName = additionalInfo.sizeName;
 	    }
   	};
 })();
@@ -121,24 +156,33 @@ chrome.runtime.onConnect.addListener(function(port) {
 
 	switch(port.name) {
 	    case 'tradeConfigFromPopup':
+	    	window.isAutoTradeStarted = true;
 	        setTradeConfigFromPopup(port);
 	        break;
 	    case 'tradeConfigFromContentScript':
+	    	window.isAutoTradeStarted = true;
 			autoTrade.tradeConfigFromContentScript(port);
 	        break;
-	    case 'parseBillPage':
+	    case 'checkAutoTradeState':
+	    	checkAutoTradeState(port);
 	        break;
 	    default:
 	    	console.log("It doesn't match port name:" + port.name);
 	}
 });
 
+var checkAutoTradeState = function(port) {
+	port.onMessage.addListener(function(msg) {
+		port.postMessage({isAutoTradeStarted: window.isAutoTradeStarted});
+	});
+}
+
 var setTradeConfigFromPopup = function(port) {
 	port.onMessage.addListener(function(msg) {
 		console.log(msg, 'trade config message recieved');
 
 		if (msg.taobaoItems.length == 0) {
-	        port.postMessage({success: false, message: 'Error: taobaoItemList 不得為空值！'});
+	        port.postMessage({success: false, message: 'Error: taobaoItems 不得為空值！'});
 	        return;
 	    }
 	    autoTrade.initTaobaoItemList(msg.taobaoItems);
@@ -151,6 +195,4 @@ var triggerAutoTrade = function() {
     var taobaoItemId = autoTrade.getTaobaoItem().content.id;
     var url = 'https://item.taobao.com/item.htm?id=' + taobaoItemId;
     autoTrade.chromeTabsCreate(url);
-
-    window.isSetTradeConfig = true;
 }

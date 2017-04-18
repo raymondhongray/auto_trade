@@ -17,12 +17,12 @@ $(function() {
 		    	autoTradeEnsureDone(function() {
 		    		console.log('msg', msg);
 			    	console.log('#' + msg.taobaoItem.seq + ' done.', '(Received a msg from bp...)');
-			        chrome.runtime.sendMessage({taobaoItemId: taobaoItem.id});
+			        chrome.runtime.sendMessage({type: 'autoTrade', taobaoItemId: taobaoItem.id, additionalInfo: additionalInfo.getComparison()});
 			    });
 		        break;
 		    case 'tradeConfigFromContentScript':
 		    	// 要先 JSON.stringify() 再 encodeURIComponent()
-		    	// 範例儲存方式 <div id="taobaoItemsContentScript" data-items="%5B%7B%22content%22%3A%7B%22id%22%3A%22527361405258%22%2C%22colorSku%22%3A%2220509%3A28315%22%2C%22sizeSku%22%3A%221627207%3A149938866%22%2C%22amount%22%3A10%7D%2C%22done%22%3A0%7D%2C%7B%22content%22%3A%7B%22id%22%3A%22545998369080%22%2C%22colorSku%22%3A%2220509%3A1446377418%22%2C%22sizeSku%22%3A%221627207%3A7201401%22%2C%22amount%22%3A8%7D%2C%22done%22%3A0%7D%5D">我是taobaoItems<div>
+		    	// 範例儲存方式 <div id="taobaoItemsContentScript" data-items="%5B%7B%22id%22%3A%22527361405258%22%2C%22colorSku%22%3A%2220509%3A28315%22%2C%22sizeSku%22%3A%221627207%3A149938866%22%2C%22amount%22%3A10%7D%2C%7B%22id%22%3A%22545998369080%22%2C%22colorSku%22%3A%2220509%3A1446377418%22%2C%22sizeSku%22%3A%221627207%3A7201401%22%2C%22amount%22%3A8%7D%5D">我是taobaoItems<div>
 		    	var $targetElement = $('#taobaoItemsContentScript');
 		    	if ($targetElement.length > 0 && typeof $targetElement.data('items') != 'undefined') {
 		    		var taobaoItems = JSON.parse(decodeURIComponent($targetElement.data('items')));
@@ -32,21 +32,16 @@ $(function() {
 		    	}
 
 		        break;
+		    case 'showResult':
+		    	if (confirm('是否要執行VeryBuy批次自動拍?')) {
+		    		chrome.runtime.sendMessage({type: 'showResult'});
+		    	}
+		    	break;
 		    default:
 		    	console.log("It doesn't match type:" + msg.type);
 		}
 	});
 });
-
-var autoTradeEnsureDone = function(callback) {
-    if (!window.isTradeDone) {
-        setTimeout(function() { autoTradeEnsureDone(callback); }, 50);
-    } else {
-        if (callback) {
-            callback();
-        }
-    }
-};
 
 var runAutoTrade = function(taobaoItemId, colorSku, sizeSku, amount) {
 	// if (confirm('是否要執行VeryBuy批次自動拍?') == false)
@@ -55,14 +50,20 @@ var runAutoTrade = function(taobaoItemId, colorSku, sizeSku, amount) {
 		alert('taobao項目任一參數不得為空值！');
 		return;
 	}
-
 	setTimeout(function() {
 
 	    document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + colorSku + '"] ')[0].classList.remove("tb-selected");
 		document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + sizeSku + '"] ')[0].classList.remove("tb-selected");
 
 		document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + colorSku + '"] > a')[0].click();
+
+		additionalInfo.setNameByColorSku(colorSku);
+
 		document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + sizeSku + '"] > a')[0].click();
+
+		additionalInfo.setNameBySizeSku(sizeSku);
+
+		additionalInfo.setNameByTaobaoItemId(taobaoItemId);
 
 		setAmountByTriggerIncrease(amount);
 
@@ -77,7 +78,44 @@ var runAutoTrade = function(taobaoItemId, colorSku, sizeSku, amount) {
 			});
 		}, amount_delay);
 	}, 2000);
+};
 
+var additionalInfo = (function() {
+	var comparison = {};
+	var getTaobaoItemName = function() {
+		// taobaoItemId 暫時不需要用
+		return document.querySelectorAll('#J_Title .tb-main-title .t-title')[0].textContent;
+	};
+	var getNameByColorSku = function(colorSku) {
+		return document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + colorSku + '"] > a')[0].getAttribute('title');
+	};
+	var getNameBySizeSku = function(sizeSku) {
+		return document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + sizeSku + '"] > a')[0].getAttribute('title');
+	};
+	return {
+		getComparison: function() {
+			return comparison;
+		},
+		setNameByTaobaoItemId: function(taobaoItemId) {
+			comparison.itemName = getTaobaoItemName();
+		},
+		setNameByColorSku: function(colorSku) {
+			comparison.colorName = getNameByColorSku(colorSku);
+		},
+		setNameBySizeSku: function(sizeSku) {
+			comparison.sizeName = getNameBySizeSku(sizeSku);
+		},
+	}
+})();
+
+var autoTradeEnsureDone = function(callback) {
+    if (!window.isTradeDone) {
+        setTimeout(function() { autoTradeEnsureDone(callback); }, 50);
+    } else {
+        if (callback) {
+            callback();
+        }
+    }
 };
 
 var popupCloseEnsureExisted = function(callback) {
