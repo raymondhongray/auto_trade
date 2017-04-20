@@ -1,5 +1,7 @@
 window.isAutoTradeStarted = false;
 window.cartUrl = 'https://world.taobao.com/cart/cart.htm?showResult=1';
+// 存放從淘寶購物車爬到的資訊
+window.taobaoCartResult = [];
 
 chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
     var tabStatus = changeInfo.status;
@@ -54,6 +56,8 @@ chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
 		    break;
 		case 'showResult':
 			autoTrade.chromeTabsCreate('result.html');
+			// 存取從淘寶購物車爬到的資訊
+			window.taobaoCartResult = msg.taobaoCartResult;
 		break;
 		default:
 		    console.log("It doesn't match type:" + msg.type);
@@ -147,6 +151,10 @@ var autoTrade = (function() {
 	    	taobaoItemList[seq].content.name = additionalInfo.itemName;
 	    	taobaoItemList[seq].content.colorName = additionalInfo.colorName;
 	    	taobaoItemList[seq].content.sizeName = additionalInfo.sizeName;
+	    },
+	    getTaobaoCartResult: function() {
+	    	// 從淘寶購物車爬到的資訊
+	    	return window.taobaoCartResult
 	    }
   	};
 })();

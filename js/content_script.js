@@ -33,8 +33,13 @@ $(function() {
 
 		        break;
 		    case 'showResult':
-		    	if (confirm('是否要執行VeryBuy批次自動拍?')) {
-		    		chrome.runtime.sendMessage({type: 'showResult'});
+		    	if (confirm('是否要顯示VeryBuy自動拍\n購物訂單對照表?')) {
+		    		taobaoCartEnsureLoaded(function() {
+			    		parseTaobaoCartContent.init();
+			    		var taobaoCartResult = parseTaobaoCartContent.getTaobaoCartResult();
+			    		console.log(taobaoCartResult, 'taobaoCartResult');
+			    		chrome.runtime.sendMessage({type: 'showResult', taobaoCartResult: taobaoCartResult});
+			    	});
 		    	}
 		    	break;
 		    default:
@@ -128,6 +133,16 @@ var popupCloseEnsureExisted = function(callback) {
     }
 };
 
+var taobaoCartEnsureLoaded = function(callback) {
+    if (typeof document.querySelectorAll('.item-basic-info > a')[0] == 'undefined') {
+        setTimeout(function() { taobaoCartEnsureLoaded(callback); }, 50);
+    } else {
+        if (callback) {
+            callback();
+        }
+    }
+};
+
 var setAmountByTriggerIncrease = function(amount) {
 	var i = 1;
 	interval = setInterval(function(){
@@ -141,8 +156,72 @@ var setAmountByTriggerIncrease = function(amount) {
 }
 
 var setAmountByAutoKeydown = function(amount) {
+	// 暫時不使用
 	var e = $.Event('keydown');
     e.which = parseInt(amount) + 48; // keycode of zero is 48
     $('#J_IptAmount').focus();
     $('#J_IptAmount').trigger(e);
 }
+
+var parseTaobaoCartContent = (function() {
+	var taobaoCartResult = [];
+	var getParseBasicInfo = function() {
+		// 回傳一個 [[name], [id in href]]
+		var result = [[], []];
+		var basicInfo = document.querySelectorAll('.item-basic-info > a')
+		basicInfo.forEach(function(item) {
+			// name of item
+		    result[0].push(item.textContent);
+		    // href with id
+		    var href = item.getAttribute('href').split('//world.taobao.com/item/')[1];
+		    var taobaoItemid = href.split('.')[0];
+		    result[1].push(taobaoItemid);
+		});
+		return result;
+	};
+	var getParseMixedSku = function() {
+		// 回傳一個 [[colorName], [sizeName]]
+		var result = [[], []];
+		var mixedSku = document.querySelectorAll('.td-info .sku-line');
+		mixedSku.forEach(function(item, i) {
+		    result[i & 1].push(item.textContent);
+		});
+		return result;
+	};
+	var getAmountOfItems = function() {
+		var result = [];
+		var amountofItems = document.querySelectorAll('.item-amount > input');
+		amountofItems.forEach(function(item) {
+		    result.push(item.getAttribute('value'));
+		});
+		return result;
+	};
+	return {
+		init: function() {
+			var basicInfo = getParseBasicInfo();
+
+		    basicInfo[0].forEach(function(item, i) {
+		    	taobaoCartResult.push({name: item});
+		    });
+		    basicInfo[1].forEach(function(item, i) {
+		    	taobaoCartResult[i].id = item;
+		    });
+
+			var mixedSku = getParseMixedSku();
+
+			mixedSku[0].forEach(function(item, i) {
+		    	taobaoCartResult[i].colorName = item.split('颜色分类：')[1];
+		    });
+		    mixedSku[1].forEach(function(item, i) {
+		    	taobaoCartResult[i].sizeName = item.split('尺码：')[1];
+		    });
+
+		    getAmountOfItems().forEach(function(amount, i) {
+		    	taobaoCartResult[i].amount = amount;
+		    });
+		},
+		getTaobaoCartResult: function() {
+			return taobaoCartResult;
+		}
+	}
+})();
