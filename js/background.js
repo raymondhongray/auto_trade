@@ -118,7 +118,7 @@ var autoTrade = (function() {
   		},
   		initTaobaoItemList: function(list) {
 			taobaoItemList = [];
-			for (x in list) {
+			for (var x in list) {
 			    taobaoItemList.push({content: list[x], done: 0});
 			}
 			taobaoItem.seq = 0;
@@ -151,6 +151,7 @@ var autoTrade = (function() {
 	    	taobaoItemList[seq].content.name = additionalInfo.itemName;
 	    	taobaoItemList[seq].content.colorName = additionalInfo.colorName;
 	    	taobaoItemList[seq].content.sizeName = additionalInfo.sizeName;
+	    	taobaoItemList[seq].content.cKey = additionalInfo.cKey;
 	    },
 	    getTaobaoCartResult: function() {
 	    	// 從淘寶購物車爬到的資訊

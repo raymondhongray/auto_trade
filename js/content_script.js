@@ -33,14 +33,13 @@ $(function() {
 
 		        break;
 		    case 'showResult':
-		    	if (confirm('是否要顯示VeryBuy自動拍\n購物訂單對照表?')) {
-		    		taobaoCartEnsureLoaded(function() {
-			    		parseTaobaoCartContent.init();
-			    		var taobaoCartResult = parseTaobaoCartContent.getTaobaoCartResult();
-			    		console.log(taobaoCartResult, 'taobaoCartResult');
-			    		chrome.runtime.sendMessage({type: 'showResult', taobaoCartResult: taobaoCartResult});
-			    	});
-		    	}
+		    	alert('即將產生VeryBuy自動拍 購物訂單對照表...');
+		    	taobaoCartEnsureLoaded(function() {
+		    		parseTaobaoCartContent.init();
+		    		var taobaoCartResult = parseTaobaoCartContent.getTaobaoCartResult();
+		    		console.log(taobaoCartResult, 'taobaoCartResult');
+		    		chrome.runtime.sendMessage({type: 'showResult', taobaoCartResult: taobaoCartResult});
+		    	});
 		    	break;
 		    default:
 		    	console.log("It doesn't match type:" + msg.type);
@@ -49,16 +48,15 @@ $(function() {
 });
 
 var runAutoTrade = function(taobaoItemId, colorSku, sizeSku, amount) {
-	// if (confirm('是否要執行VeryBuy批次自動拍?') == false)
-	// 	return;
+
 	if (!taobaoItemId || !colorSku || !sizeSku || !amount) {
 		alert('taobao項目任一參數不得為空值！');
 		return;
 	}
 	setTimeout(function() {
 
-	    document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + colorSku + '"] ')[0].classList.remove("tb-selected");
-		document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + sizeSku + '"] ')[0].classList.remove("tb-selected");
+	    document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + colorSku + '"]')[0].classList.remove('tb-selected');
+		document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + sizeSku + '"]')[0].classList.remove('tb-selected');
 
 		document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + colorSku + '"] > a')[0].click();
 
@@ -72,10 +70,12 @@ var runAutoTrade = function(taobaoItemId, colorSku, sizeSku, amount) {
 
 		setAmountByTriggerIncrease(amount);
 
+		additionalInfo.setAmountForKeyValue(amount);
+
 		var amount_delay = amount * 350;
 
 		setTimeout(function() {
-		    document.getElementById("J_btn_addToCart").click();
+		    document.getElementById('J_btn_addToCart').click();
 
 			popupCloseEnsureExisted(function() {
 				document.querySelectorAll('.J_popup_close.sea-iconfont')[0].click();
@@ -87,6 +87,8 @@ var runAutoTrade = function(taobaoItemId, colorSku, sizeSku, amount) {
 
 var additionalInfo = (function() {
 	var comparison = {};
+	var _taobaoItemId = '0';
+	var _amount = 0;
 	var getTaobaoItemName = function() {
 		// taobaoItemId 暫時不需要用
 		return document.querySelectorAll('#J_Title .tb-main-title .t-title')[0].textContent;
@@ -97,11 +99,22 @@ var additionalInfo = (function() {
 	var getNameBySizeSku = function(sizeSku) {
 		return document.querySelectorAll('.tb-cleafix > .J_SKU[data-pv="' + sizeSku + '"] > a')[0].getAttribute('title');
 	};
+	var setKeyValue = function() {
+		var o = {
+			id: _taobaoItemId,
+			colorName: comparison.colorName,
+			sizeName: comparison.sizeName,
+			amount: _amount
+		}
+		comparison.cKey = JSON.stringify(o);
+	}
 	return {
 		getComparison: function() {
+			setKeyValue();
 			return comparison;
 		},
 		setNameByTaobaoItemId: function(taobaoItemId) {
+			_taobaoItemId = taobaoItemId;
 			comparison.itemName = getTaobaoItemName();
 		},
 		setNameByColorSku: function(colorSku) {
@@ -110,6 +123,9 @@ var additionalInfo = (function() {
 		setNameBySizeSku: function(sizeSku) {
 			comparison.sizeName = getNameBySizeSku(sizeSku);
 		},
+		setAmountForKeyValue: function(amount) {
+			_amount = amount;
+		}
 	}
 })();
 
@@ -196,6 +212,21 @@ var parseTaobaoCartContent = (function() {
 		});
 		return result;
 	};
+	var assignKeyValues = function() {
+
+		for (var item in taobaoCartResult) {
+
+			var i = Object.keys(taobaoCartResult).indexOf(item);
+			item = taobaoCartResult[i];
+			var o = {
+				id: item.id,
+				colorName: item.colorName,
+				sizeName: item.sizeName,
+				amount: item.amount
+			}
+			taobaoCartResult[i].cKey = JSON.stringify(o);
+		}
+	};
 	return {
 		init: function() {
 			var basicInfo = getParseBasicInfo();
@@ -217,8 +248,10 @@ var parseTaobaoCartContent = (function() {
 		    });
 
 		    getAmountOfItems().forEach(function(amount, i) {
-		    	taobaoCartResult[i].amount = amount;
+		    	taobaoCartResult[i].amount = parseInt(amount);
 		    });
+
+		    assignKeyValues();
 		},
 		getTaobaoCartResult: function() {
 			return taobaoCartResult;
